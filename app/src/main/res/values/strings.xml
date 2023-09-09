@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ImageOrganizer</string>
+    <string name="image_organizer">Image Organizer</string>
+    <string name="add_images">Add Images</string>
+    <string name="Total_Images_Count">TextView</string>
+    <string name="total_images">Total Images:</string>
+</resources>
