@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/add_image_button"
+        android:title="@string/add_images" />
+    <item android:id="@+id/add_filter_button"
+        android:title="@string/add_filters" />
+    <item android:id="@+id/remove_filter_button"
+        android:title="@string/remove_filter" />
+</menu>
