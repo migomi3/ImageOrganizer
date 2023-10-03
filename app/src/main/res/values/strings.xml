@@ -2,6 +2,12 @@
     <string name="app_name">ImageOrganizer</string>
     <string name="image_organizer">Image Organizer</string>
     <string name="add_images">Add Images</string>
-    <string name="Total_Images_Count">TextView</string>
-    <string name="total_images">Total Images:</string>
+    <string name="total_images">Total Images: </string>
+    <string name="filterContentDescription">Access gallery filters</string>
+    <string name="all">All</string>
+    <string name="menu">Menu</string>
+    <string name="remove_filter">Remove filter</string>
+    <string name="add_filters">Add filters</string>
+    <string name="ok">OK</string>
+    <string name="clear_filters">Clear Filters</string>
 </resources>
