@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace = "com.example.imageorganizer"
-    compileSdk = 33
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.imageorganizer"
         minSdk = 24
-        targetSdk = 33
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -38,9 +38,6 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("com.github.bumptech.glide:glide:4.16.0")
     implementation ("com.squareup.picasso:picasso:2.8")
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("androidx.datastore:datastore-preferences-rxjava3:1.1.1")
-    implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")

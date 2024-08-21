@@ -1,17 +1,11 @@
 package com.example.imageorganizer;
 
-import static android.content.ContentValues.TAG;
 import static android.os.Environment.MEDIA_MOUNTED;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.datastore.preferences.core.MutablePreferences;
-import androidx.datastore.preferences.core.Preferences;
-import androidx.datastore.preferences.core.PreferencesKeys;
-import androidx.datastore.preferences.rxjava3.RxPreferenceDataStoreBuilder;
-import androidx.datastore.rxjava3.RxDataStore;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -24,7 +18,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.text.InputType;
-import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
@@ -38,22 +31,12 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
-import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.core.Single;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 
 
 //https://www.youtube.com/watch?v=zg0_YS9PYi4
 //https://www.geeksforgeeks.org/how-to-build-a-photo-viewing-application-in-android/
-//https://developer.android.com/topic/libraries/architecture/datastore#java
-//https://stackoverflow.com/questions/75443067/preferences-datastore-in-android-using-java
-//https://medium.com/@deadmanapple/using-the-android-datastore-library-instead-of-sharedpreferences-in-java-d6744c348a05
 
 public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuItemClickListener {
     private static final int PERMISSION_REQUEST_CODE = 111;
@@ -61,9 +44,6 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     private RecyclerView recycler;
     private ArrayList<String> images;
     private TextView totalImages;
-
-    RxDataStore<Preferences> dataStore;
-    Preferences.Key<Set<String>> FILTER_KEY = PreferencesKeys.stringSetKey("filter_key");
     ArrayList<String> filterList = new ArrayList<>();
 
     @Override
@@ -71,13 +51,6 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        DataStoreSingleton dataStoreSingleton = DataStoreSingleton.getInstance();
-        if (dataStoreSingleton.getDataStore() == null) {
-            dataStore = new RxPreferenceDataStoreBuilder(this, "filters").build();
-        } else {
-            dataStore = dataStoreSingleton.getDataStore();
-        }
-        dataStoreSingleton.setDataStore(dataStore);
 
         recycler = findViewById(R.id.gallery_recycler);
         images = new ArrayList<>();
@@ -131,6 +104,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     private void enterFilters(Dialog dialog, ChipGroup chipGroup) {
+        //TODO: where tf are the filters coming from here?
         List<Integer> chipIds = chipGroup.getCheckedChipIds();
         ArrayList<String> checkedChips = new ArrayList<>();
         for(Integer id : chipIds) {
@@ -145,21 +119,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     private void generateFilters(ChipGroup chipGroup) {
-        Flowable<Set<String>> testSingle = dataStore.data().map(prefs -> prefs.get(FILTER_KEY)).onErrorResumeNext(throwable -> {
-            Log.e(TAG, "Error reading data from DataStore", throwable);
-            return Flowable.just(new HashSet<>());
-        });
-        testSingle.subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribe(filterSet -> {
-            for (String filterStr : filterSet) {
-                Chip filterChip = new Chip(this);
-                filterChip.setText(filterStr);
-                filterChip.setCheckable(true);
-                filterChip.setChecked(filterList.contains(filterStr));
-                chipGroup.addView(filterChip);
-            }
-        },
-        throwable -> Log.e(TAG, "generateFilters: ", throwable));
-
+        //TODO: Rewrite logic
     }
 
     private void requestPermissions() {
@@ -187,6 +147,8 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     private void loadImages() {
+        //TODO: throw image paths to data table
+        //TODO: add filtering logic
         boolean SDCard = Environment.getExternalStorageState().equals(MEDIA_MOUNTED);
         if (SDCard) {
             final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID};
@@ -246,17 +208,12 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     private void addImage() {
-        //TODO: write code
+        //TODO: decide logic
         Toast.makeText(getApplicationContext(), "test addImage()", Toast.LENGTH_SHORT).show();
     }
 
     private void removeFilter() {
         //TODO: Figure out how I want this thing to work and replace this code block with it
-        dataStore.updateDataAsync(prefsIn -> {
-            MutablePreferences mutablePreferences = prefsIn.toMutablePreferences();
-            mutablePreferences.remove(FILTER_KEY);
-            return Single.just(mutablePreferences);
-        });
         Toast.makeText(this, "remove filter test", Toast.LENGTH_SHORT).show();
     }
 
@@ -264,30 +221,21 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("New Filter");
 
-        final EditText input = new EditText(this);
+        EditText input = new EditText(this);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
 
         builder.setView(input);
 
-        builder.setPositiveButton("OK", (dialogInterface, i) -> dataStore.updateDataAsync(prefsIn -> {
-            MutablePreferences mutablePreferences = prefsIn.toMutablePreferences();
-            String inputStr = input.getText().toString();
-            Set<String> filter_set;
-
-            boolean setExists = mutablePreferences.get(FILTER_KEY) != null;
-
-            if(setExists) { filter_set = new HashSet<>(mutablePreferences.get(FILTER_KEY)); }
-            else { filter_set = new HashSet<>(); }
-
-            filter_set.add(inputStr);
-
-            mutablePreferences.set(FILTER_KEY, filter_set);
-            return Single.just(mutablePreferences);
-        }));
+        //TODO: add logic
+        builder.setPositiveButton("OK", (dialogInterface, i) -> saveFilterInput(input.getText().toString()));
 
         builder.setNegativeButton("Cancel", (dialogInterface, i) -> dialogInterface.cancel());
 
         builder.show();
 
+    }
+
+    public String saveFilterInput(String input) {
+        return input;
     }
 }
