@@ -5,34 +5,41 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.provider.MediaStore;
 
 import androidx.annotation.Nullable;
 
-import java.io.File;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+
 
 public class SQLiteManager extends SQLiteOpenHelper {
     public static final String dbName = "ImageOrganizer.db";
     public static final int dbVersion = 1;
 
-    private static String SQL_CREATE_IMAGE_PATHS_TABLE =
+    private static final String SQL_CREATE_IMAGE_PATHS_TABLE =
             "CREATE TABLE " + TableClasses.Image.TABLE_NAME + "(" +
-                    TableClasses.Image._ID + " INT PRIMARY KEY," +
-                    TableClasses.Image.PATH_COL + " VARCHAR(255) NOT NULL," +
-                    TableClasses.Image.NAME_COL + " VARCHAR(255));";
-    private static String SQL_CREATE_FILTERS_TABLE =
+                    TableClasses.Image._ID + " INT PRIMARY KEY, " +
+                    TableClasses.Image.PATH_COL + " VARCHAR(255) NOT NULL UNIQUE, " +
+                    TableClasses.Image.NAME_COL + " VARCHAR(255), " +
+                    MediaStore.Images.Media.DATE_TAKEN + " DATE);";
+    private static final String SQL_CREATE_FILTERS_TABLE =
             "CREATE TABLE " + TableClasses.Filter.TABLE_NAME + "(" +
-                    TableClasses.Filter._ID + " INT PRIMARY KEY," +
-                    TableClasses.Filter.FILTER_COL + " VARCHAR(255) NOT NULL);";
-    private static String SQL_CREATE_IMAGE_FILTER_TABLE =
+                    TableClasses.Filter._ID + " INT PRIMARY KEY, " +
+                    TableClasses.Filter.FILTER_COL + " VARCHAR(255) NOT NULL UNIQUE);";
+    private static final String SQL_CREATE_IMAGE_FILTER_TABLE =
             "CREATE TABLE " + TableClasses.ImageFilter.TABLE_NAME + "(" +
-                    TableClasses.ImageFilter._ID + "INT PRIMARY KEY," +
+                    TableClasses.ImageFilter._ID + " INT PRIMARY KEY," +
                     TableClasses.ImageFilter.IMAGE_ID_COL + " VARCHAR(255) NOT NULL, " +
-                    TableClasses.ImageFilter.FILTER_ID_COL + " INT NOT NULL," +
+                    TableClasses.ImageFilter.FILTER_ID_COL + " INT NOT NULL, " +
                     "FOREIGN KEY (" + TableClasses.ImageFilter.IMAGE_ID_COL + ") REFERENCES " + TableClasses.Image.TABLE_NAME + "(" + TableClasses.Image._ID + "), " +
-                    "FOREIGN KEY (" + TableClasses.ImageFilter.FILTER_ID_COL + ") REFERENCES " + TableClasses.Filter.TABLE_NAME + "(" + TableClasses.Filter._ID + "));";
+                    "FOREIGN KEY (" + TableClasses.ImageFilter.FILTER_ID_COL + ") REFERENCES " + TableClasses.Filter.TABLE_NAME + "(" + TableClasses.Filter._ID + "), " +
+                    "UNIQUE(" + TableClasses.ImageFilter.IMAGE_ID_COL + ", " + TableClasses.ImageFilter.FILTER_ID_COL + "));";
 
-    public SQLiteManager(Context context, @Nullable String name, @Nullable SQLiteDatabase.CursorFactory factory) {
-        super(context, name, factory, dbVersion);
+
+    public SQLiteManager(Context context) {
+        super(context, dbName, null, dbVersion);
     }
 
     @Override
@@ -55,16 +62,28 @@ public class SQLiteManager extends SQLiteOpenHelper {
         onCreate(db);
     }
 
-    public long insertToImagePathTable(SQLiteDatabase db, String path, @Nullable String name) {
+    public String unixInterpreter(String unix) {
+        SimpleDateFormat sdf = new SimpleDateFormat("YYYY-MM-DD HH:MM:SS", Locale.getDefault());
+        return sdf.format(new Date(Long.parseLong(unix)));
+    }
+
+    public long insertToImagePathTable(String path, @Nullable String name, @Nullable String date) {
+        SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
 
         values.put(TableClasses.Image.PATH_COL, path);
-        values.put(TableClasses.Image.NAME_COL, name);
+        if (name != null) {
+            values.put(TableClasses.Image.NAME_COL, name);
+        }
+        if (date != null){
+            values.put(MediaStore.Images.Media.DATE_TAKEN, unixInterpreter(date));
+        }
 
         return db.insert(TableClasses.Image.TABLE_NAME, null, values);
     }
 
-    public long insertToFilterTable(SQLiteDatabase db, String filter) {
+    public long insertToFilterTable(String filter) {
+        SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
 
         values.put(TableClasses.Filter.FILTER_COL, filter);
@@ -72,7 +91,8 @@ public class SQLiteManager extends SQLiteOpenHelper {
         return db.insert(TableClasses.Filter.TABLE_NAME, null, values);
     }
 
-    public long insertToImageFilterTable(SQLiteDatabase db, long imageId, long filterId) {
+    public long insertToImageFilterTable(long imageId, long filterId) {
+        SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
 
         values.put(TableClasses.ImageFilter.IMAGE_ID_COL, imageId);
@@ -81,10 +101,11 @@ public class SQLiteManager extends SQLiteOpenHelper {
         return db.insert(TableClasses.ImageFilter.TABLE_NAME, null, values);
     }
 
-    public Cursor selectFromImagePathTable(SQLiteDatabase db, String[] columns, String where, String[] whereArgs, String sortBy, Boolean asc) {
-        String orderBy = null;
+    public Cursor selectFromImagePathTable(String[] columns, String where, String[] whereArgs, @Nullable String sortBy, Boolean asc) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        String orderBy = MediaStore.Images.Media.DATE_TAKEN + " DESC";
 
-        if (sortBy != "") {
+        if (sortBy != null) {
             if (asc) {
                 orderBy = sortBy + "ASC";
             } else {
@@ -95,10 +116,11 @@ public class SQLiteManager extends SQLiteOpenHelper {
         return db.query(TableClasses.Image.TABLE_NAME, columns, where, whereArgs, null, null, orderBy);
     }
 
-    public Cursor selectFromFilterTable(SQLiteDatabase db, String[] columns, String where, String[] whereArgs, String sortBy, Boolean asc) {
+    public Cursor selectFromFilterTable(String[] columns, String where, String[] whereArgs, String sortBy, Boolean asc) {
+        SQLiteDatabase db = this.getReadableDatabase();
         String orderBy = null;
 
-        if (sortBy != "") {
+        if (sortBy != null) {
             if (asc) {
                 orderBy = sortBy + "ASC";
             } else {
@@ -109,10 +131,11 @@ public class SQLiteManager extends SQLiteOpenHelper {
         return db.query(TableClasses.Filter.TABLE_NAME, columns, where, whereArgs, null, null, orderBy);
     }
 
-    public Cursor selectFromImageFilterTable(SQLiteDatabase db, String[] columns, String where, String[] whereArgs, String sortBy, Boolean asc) {
+    public Cursor selectFromImageFilterTable(String[] columns, String where, String[] whereArgs, String sortBy, Boolean asc) {
+        SQLiteDatabase db = this.getReadableDatabase();
         String orderBy = null;
 
-        if (sortBy != "") {
+        if (sortBy != null) {
             if (asc) {
                 orderBy = sortBy + "ASC";
             } else {

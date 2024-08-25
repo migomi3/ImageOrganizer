@@ -44,7 +44,8 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     private RecyclerView recycler;
     private ArrayList<String> images;
     private TextView totalImages;
-    ArrayList<String> filterList = new ArrayList<>();
+    private SQLiteManager dbManager;
+    private String[] filters;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,6 +56,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         recycler = findViewById(R.id.gallery_recycler);
         images = new ArrayList<>();
         GalleryAdaptor adaptor = new GalleryAdaptor(MainActivity.this, images);
+        dbManager = new SQLiteManager(this);
 
 
         recycler.setAdapter(adaptor);
@@ -71,6 +73,11 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         ImageButton filterButton = findViewById(R.id.filter_button);
         filterButton.setOnClickListener(view -> showFilters());
 
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
     }
 
     private void showMenu(View view) {
@@ -105,17 +112,18 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
 
     private void enterFilters(Dialog dialog, ChipGroup chipGroup) {
         //TODO: where tf are the filters coming from here?
+        //TODO: fix filter logic
         List<Integer> chipIds = chipGroup.getCheckedChipIds();
         ArrayList<String> checkedChips = new ArrayList<>();
         for(Integer id : chipIds) {
             Chip chip = dialog.findViewById(id);
             checkedChips.add(chip.getText().toString());
         }
-        filterList = checkedChips;
+        //filters = checkedChips;
     }
 
     private void clearFilters() {
-        filterList.clear();
+        filters = null;
     }
 
     private void generateFilters(ChipGroup chipGroup) {
@@ -140,35 +148,97 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     private void prepareRecyclerView() {
-
         GridLayoutManager manager = new GridLayoutManager(MainActivity.this, 4);
 
         recycler.setLayoutManager(manager);
     }
 
     private void loadImages() {
-        //TODO: throw image paths to data table
-        //TODO: add filtering logic
         boolean SDCard = Environment.getExternalStorageState().equals(MEDIA_MOUNTED);
         if (SDCard) {
-            final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID};
-            final String order = MediaStore.Images.Media.DATE_TAKEN + " DESC";
+            final String[] pathCol = {TableClasses.Image.PATH_COL};
+            String[] dbData = prepareImages(pathCol);
+            loadNewImages(dbData);
+            getImages(pathCol);
+            Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
+        }
+    }
 
-            Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, order);
+    //TODO: add filtering logic
+    private void getImages(String[] pathCol) {
+        Cursor imagePaths = dbManager.selectFromImagePathTable(pathCol, null, null, null, null);
 
-            int count = cursor != null ? cursor.getCount() : 0;
+        int count = imagePaths != null ? imagePaths.getCount() : 0;
 
-            totalImages.setText("Total Images: " + count);
+        String[] dbData = new String[count];
 
-            for (int i = 0; i < count; i++) {
-                cursor.moveToPosition(i);
-                int colIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
-                images.add(cursor.getString(colIndex));
+        totalImages.setText("Total Images: " + count);
+
+        for (int i = 0; i < count; i++) {
+            imagePaths.moveToPosition(i);
+            int dataIndex = imagePaths.getColumnIndex(TableClasses.Image.PATH_COL);
+
+            images.add(imagePaths.getString(dataIndex));
+        }
+
+        if (imagePaths != null) { imagePaths.close(); }
+    }
+
+    private String[] prepareImages(String[] pathCol) { //TODO: find better method name
+        Cursor imagePaths = dbManager.selectFromImagePathTable(pathCol, null, null, null, null);
+
+        int count = imagePaths != null ? imagePaths.getCount() : 0;
+
+        String[] dbData = new String[count];
+
+        for (int i = 0; i < count; i++) {
+            imagePaths.moveToPosition(i);
+            int dataIndex = imagePaths.getColumnIndex(TableClasses.Image.PATH_COL);
+
+            dbData[i] = imagePaths.getString(dataIndex);
+        }
+
+        if (imagePaths != null) { imagePaths.close(); }
+
+        return dbData;
+    }
+
+    public void loadNewImages(String[] paths) {
+        final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN};
+        final String order = MediaStore.Images.Media.DATE_TAKEN + " DESC";
+        int pathCount = paths.length;
+        String where = null;
+        String[] whereArgs = null;
+
+        if (pathCount > 0) {
+            where = MediaStore.Images.Media.DATA + " NOT IN (";
+
+            for (int i = 0; i < pathCount; i++) {
+                where += "?, ";
             }
 
-            Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
-            if (cursor != null) { cursor.close(); }
+            where = where.substring(0, where.length() - 2) + ")";
+            whereArgs = paths;
         }
+
+        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, where, whereArgs, order);
+
+        int count = cursor != null ? cursor.getCount() : 0;
+
+        for (int i = 0; i < count; i++) {
+            cursor.moveToPosition(i);
+            int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
+            int nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME);
+            int dateIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
+
+            String data = cursor.getString(dataIndex);
+            String name = cursor.getString(nameIndex);
+            String date = cursor.getString(dateIndex);
+
+            dbManager.insertToImagePathTable(data, name, date);
+        }
+
+        if (cursor != null) { cursor.close(); }
     }
 
     @Override
