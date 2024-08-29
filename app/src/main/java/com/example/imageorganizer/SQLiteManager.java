@@ -20,18 +20,18 @@ public class SQLiteManager extends SQLiteOpenHelper {
 
     private static final String SQL_CREATE_IMAGE_PATHS_TABLE =
             "CREATE TABLE " + TableClasses.Image.TABLE_NAME + "(" +
-                    TableClasses.Image._ID + " INT PRIMARY KEY, " +
+                    TableClasses.Image._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     TableClasses.Image.PATH_COL + " VARCHAR(255) NOT NULL UNIQUE, " +
                     TableClasses.Image.NAME_COL + " VARCHAR(255), " +
                     MediaStore.Images.Media.DATE_TAKEN + " DATE);";
     private static final String SQL_CREATE_FILTERS_TABLE =
             "CREATE TABLE " + TableClasses.Filter.TABLE_NAME + "(" +
-                    TableClasses.Filter._ID + " INT PRIMARY KEY, " +
+                    TableClasses.Filter._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     TableClasses.Filter.FILTER_COL + " VARCHAR(255) NOT NULL UNIQUE);";
     private static final String SQL_CREATE_IMAGE_FILTER_TABLE =
             "CREATE TABLE " + TableClasses.ImageFilter.TABLE_NAME + "(" +
-                    TableClasses.ImageFilter._ID + " INT PRIMARY KEY," +
-                    TableClasses.ImageFilter.IMAGE_ID_COL + " VARCHAR(255) NOT NULL, " +
+                    TableClasses.ImageFilter._ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    TableClasses.ImageFilter.IMAGE_ID_COL + " INT NOT NULL, " +
                     TableClasses.ImageFilter.FILTER_ID_COL + " INT NOT NULL, " +
                     "FOREIGN KEY (" + TableClasses.ImageFilter.IMAGE_ID_COL + ") REFERENCES " + TableClasses.Image.TABLE_NAME + "(" + TableClasses.Image._ID + "), " +
                     "FOREIGN KEY (" + TableClasses.ImageFilter.FILTER_ID_COL + ") REFERENCES " + TableClasses.Filter.TABLE_NAME + "(" + TableClasses.Filter._ID + "), " +
@@ -106,10 +106,10 @@ public class SQLiteManager extends SQLiteOpenHelper {
         String orderBy = MediaStore.Images.Media.DATE_TAKEN + " DESC";
 
         if (sortBy != null) {
+            orderBy = sortBy + "DESC";
+
             if (asc) {
                 orderBy = sortBy + "ASC";
-            } else {
-                orderBy = sortBy + "DESC";
             }
         }
 
@@ -121,10 +121,10 @@ public class SQLiteManager extends SQLiteOpenHelper {
         String orderBy = null;
 
         if (sortBy != null) {
+            orderBy = sortBy + "DESC";
+
             if (asc) {
                 orderBy = sortBy + "ASC";
-            } else {
-                orderBy = sortBy + "DESC";
             }
         }
 
@@ -136,13 +136,20 @@ public class SQLiteManager extends SQLiteOpenHelper {
         String orderBy = null;
 
         if (sortBy != null) {
+            orderBy = sortBy + "DESC";
+
             if (asc) {
                 orderBy = sortBy + "ASC";
-            } else {
-                orderBy = sortBy + "DESC";
             }
         }
 
         return db.query(TableClasses.ImageFilter.TABLE_NAME, columns, where, whereArgs, null, null, orderBy);
+    }
+
+    public int removeFromFilter(String filter) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        String where = TableClasses.Filter.FILTER_COL + "=?";
+        String[] whereArg = {filter};
+        return db.delete(TableClasses.Filter.TABLE_NAME, where, whereArg);
     }
 }

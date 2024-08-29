@@ -3,6 +3,7 @@ package com.example.imageorganizer;
 import static android.os.Environment.MEDIA_MOUNTED;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -31,6 +32,7 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -142,6 +144,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     private void requestPermission() {
         ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
     }
+
     private boolean checkPermission() {
         int result = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.READ_EXTERNAL_STORAGE);
         return result == PackageManager.PERMISSION_GRANTED;
@@ -149,7 +152,6 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
 
     private void prepareRecyclerView() {
         GridLayoutManager manager = new GridLayoutManager(MainActivity.this, 4);
-
         recycler.setLayoutManager(manager);
     }
 
@@ -157,46 +159,69 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         boolean SDCard = Environment.getExternalStorageState().equals(MEDIA_MOUNTED);
         if (SDCard) {
             final String[] pathCol = {TableClasses.Image.PATH_COL};
-            String[] dbData = prepareImages(pathCol);
-            loadNewImages(dbData);
-            getImages(pathCol);
+            loadNewImages(getCurrentImagePaths(pathCol));
+            getImages(pathCol, null);
             Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
         }
     }
 
+    private String buildWhereClause(String col, int count, Boolean in) {
+        if (count > 0) {
+            StringBuilder where = new StringBuilder(col + (in ? " IN (" : " NOT IN ("));
+            for (int i = 0; i < count; i++) {
+                where.append("?, ");
+            }
+            where.setLength(where.length() - 2);
+            return where.append(")").toString();
+        }
+        return null;
+    }
+
+    private String[] extractFromCursor(Cursor cursor, String col) {
+        int count = cursor != null ? cursor.getCount() : 0;
+        String[] dataArr = new String[count];
+
+        for (int i = 0; i < count; i++) {
+            cursor.moveToPosition(i);
+            int index = cursor.getColumnIndex(col);
+            dataArr[i] = cursor.getString(index);
+        }
+        return dataArr;
+    }
+
     //TODO: add filtering logic
-    private void getImages(String[] pathCol) {
-        Cursor imagePaths = dbManager.selectFromImagePathTable(pathCol, null, null, null, null);
+    private void getImages(String[] pathCol, @Nullable String[] filters) {
+        String where = null;
+        int filterCount = filters != null ? filters.length : 0;
+
+        if (filters != null && filterCount > 0) {
+            String filterSelection = buildWhereClause(TableClasses.Filter.FILTER_COL, filterCount, true);
+            Cursor filterCursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter._ID}, filterSelection, filters, null, null);
+            String[] filterIds = extractFromCursor(filterCursor, TableClasses.Filter._ID);
+
+            String bridgeSelection = buildWhereClause(TableClasses.ImageFilter.FILTER_ID_COL, filterIds.length, true);
+            Cursor bridgeCursor = dbManager.selectFromImageFilterTable(new String[]{TableClasses.ImageFilter.IMAGE_ID_COL}, bridgeSelection, filterIds, null, null);
+            String[] imageIds = extractFromCursor(bridgeCursor, TableClasses.ImageFilter.IMAGE_ID_COL);
+
+            where = buildWhereClause(TableClasses.Image.PATH_COL, imageIds.length, true);
+        }
+
+        Cursor imagePaths = dbManager.selectFromImagePathTable(pathCol, where, filters, null, null);
 
         int count = imagePaths != null ? imagePaths.getCount() : 0;
 
-        String[] dbData = new String[count];
-
         totalImages.setText("Total Images: " + count);
 
-        for (int i = 0; i < count; i++) {
-            imagePaths.moveToPosition(i);
-            int dataIndex = imagePaths.getColumnIndex(TableClasses.Image.PATH_COL);
-
-            images.add(imagePaths.getString(dataIndex));
-        }
+        images.clear();
+        Collections.addAll(images, extractFromCursor(imagePaths, TableClasses.Image.PATH_COL));
 
         if (imagePaths != null) { imagePaths.close(); }
     }
 
-    private String[] prepareImages(String[] pathCol) { //TODO: find better method name
+    private String[] getCurrentImagePaths(String[] pathCol) {
         Cursor imagePaths = dbManager.selectFromImagePathTable(pathCol, null, null, null, null);
 
-        int count = imagePaths != null ? imagePaths.getCount() : 0;
-
-        String[] dbData = new String[count];
-
-        for (int i = 0; i < count; i++) {
-            imagePaths.moveToPosition(i);
-            int dataIndex = imagePaths.getColumnIndex(TableClasses.Image.PATH_COL);
-
-            dbData[i] = imagePaths.getString(dataIndex);
-        }
+        String[] dbData = extractFromCursor(imagePaths, pathCol[0]);
 
         if (imagePaths != null) { imagePaths.close(); }
 
@@ -211,13 +236,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         String[] whereArgs = null;
 
         if (pathCount > 0) {
-            where = MediaStore.Images.Media.DATA + " NOT IN (";
-
-            for (int i = 0; i < pathCount; i++) {
-                where += "?, ";
-            }
-
-            where = where.substring(0, where.length() - 2) + ")";
+            where = buildWhereClause(MediaStore.Images.Media.DATA, pathCount, false);
             whereArgs = paths;
         }
 
@@ -297,15 +316,10 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         builder.setView(input);
 
         //TODO: add logic
-        builder.setPositiveButton("OK", (dialogInterface, i) -> saveFilterInput(input.getText().toString()));
+        builder.setPositiveButton("OK", (dialogInterface, i) -> dbManager.insertToFilterTable(input.getText().toString()));
 
         builder.setNegativeButton("Cancel", (dialogInterface, i) -> dialogInterface.cancel());
 
         builder.show();
-
-    }
-
-    public String saveFilterInput(String input) {
-        return input;
     }
 }
