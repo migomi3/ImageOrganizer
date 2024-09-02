@@ -63,7 +63,7 @@ public class SQLiteManager extends SQLiteOpenHelper {
     }
 
     public String unixInterpreter(String unix) {
-        SimpleDateFormat sdf = new SimpleDateFormat("YYYY-MM-DD HH:MM:SS", Locale.getDefault());
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
         return sdf.format(new Date(Long.parseLong(unix)));
     }
 
@@ -113,6 +113,10 @@ public class SQLiteManager extends SQLiteOpenHelper {
             }
         }
 
+        if ( where == null || whereArgs == null) {
+            return db.query(TableClasses.Image.TABLE_NAME, columns, null, null, null, null, orderBy);
+        }
+
         return db.query(TableClasses.Image.TABLE_NAME, columns, where, whereArgs, null, null, orderBy);
     }
 
@@ -144,6 +148,48 @@ public class SQLiteManager extends SQLiteOpenHelper {
         }
 
         return db.query(TableClasses.ImageFilter.TABLE_NAME, columns, where, whereArgs, null, null, orderBy);
+    }
+
+    public String buildWhereClause(String col, int count, Boolean in) {
+        if (count > 0) {
+            StringBuilder where = new StringBuilder(col + (in ? " IN (" : " NOT IN ("));
+            for (int i = 0; i < count; i++) {
+                where.append("?, ");
+            }
+            where.setLength(where.length() - 2);
+            return where.append(")").toString();
+        }
+        return null;
+    }
+
+    public String[] extractFromCursor(Cursor cursor, String col) {
+        int count = cursor != null ? cursor.getCount() : 0;
+        String[] dataArr = new String[count];
+
+        for (int i = 0; i < count; i++) {
+            cursor.moveToPosition(i);
+            int index = cursor.getColumnIndex(col);
+            dataArr[i] = cursor.getString(index);
+        }
+        return dataArr;
+    }
+
+    public String[] getFiltersFromImageId(String[] imagesIds) {
+        String[] filterArr = null;
+
+        String bridgeSelection = buildWhereClause(TableClasses.ImageFilter.IMAGE_ID_COL, imagesIds.length, true);
+        Cursor bridgeCursor = selectFromImageFilterTable(new String[]{TableClasses.ImageFilter.FILTER_ID_COL}, bridgeSelection, imagesIds, null, null);
+        String[] filterIds = extractFromCursor(bridgeCursor, TableClasses.ImageFilter.FILTER_ID_COL);
+        if (bridgeCursor != null) { bridgeCursor.close(); }
+
+        if (filterIds != null && filterIds.length > 0) {
+            String filterSelection = buildWhereClause(TableClasses.Filter._ID, filterIds.length, true);
+            Cursor filterCursor = selectFromFilterTable(new String[]{TableClasses.Filter.FILTER_COL}, filterSelection, filterIds, null, null);
+            filterArr = extractFromCursor(filterCursor, TableClasses.Filter.FILTER_COL);
+            if (filterCursor != null) { filterCursor.close(); }
+        }
+
+        return filterArr;
     }
 
     public int removeFromFilter(String filter) {

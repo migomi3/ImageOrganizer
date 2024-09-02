@@ -21,7 +21,6 @@ import android.provider.MediaStore;
 import android.text.InputType;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.PopupMenu;
@@ -47,34 +46,39 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     private ArrayList<String> images;
     private TextView totalImages;
     private SQLiteManager dbManager;
-    private String[] filters;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-
         recycler = findViewById(R.id.gallery_recycler);
         images = new ArrayList<>();
         GalleryAdaptor adaptor = new GalleryAdaptor(MainActivity.this, images);
         dbManager = new SQLiteManager(this);
-
 
         recycler.setAdapter(adaptor);
 
         totalImages = findViewById(R.id.total_images);
 
         requestPermissions();
-
         prepareRecyclerView();
 
         ImageButton menuButton = findViewById(R.id.menu_button);
         menuButton.setOnClickListener(this::showMenu);
 
         ImageButton filterButton = findViewById(R.id.filter_button);
-        filterButton.setOnClickListener(view -> showFilters());
+        filterButton.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.FilterAction() {
+            @Override
+            public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) {
+                enterFilters(dialog, chipGroup);
+            }
 
+            @Override
+            public void negativeButtonPressed() {
+                getAllImages();
+            }
+        }));
     }
 
     @Override
@@ -89,47 +93,22 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         popup.show();
     }
 
-
-    private void showFilters() {
-        Dialog dialog = new Dialog(this);
-        dialog.setContentView(R.layout.filter_layout);
-
-        ChipGroup filterChips = dialog.findViewById(R.id.filter_chips);
-
-        Button clearButton = dialog.findViewById(R.id.clear_filter_button);
-        Button okButton = dialog.findViewById(R.id.ok_button);
-        
-        clearButton.setOnClickListener(view -> {
-            clearFilters();
-            dialog.dismiss();
-        });
-        okButton.setOnClickListener(view -> {
-            enterFilters(dialog, filterChips);
-            dialog.dismiss();
-        });
-
-        generateFilters(filterChips);
-        dialog.show();
-    }
-
     private void enterFilters(Dialog dialog, ChipGroup chipGroup) {
-        //TODO: where tf are the filters coming from here?
-        //TODO: fix filter logic
         List<Integer> chipIds = chipGroup.getCheckedChipIds();
-        ArrayList<String> checkedChips = new ArrayList<>();
-        for(Integer id : chipIds) {
-            Chip chip = dialog.findViewById(id);
-            checkedChips.add(chip.getText().toString());
+        int listSize = chipIds.size();
+
+        String[] checkedChips = new String[listSize];
+
+        for(int i = 0; i < listSize; i++) {
+            Chip chip = dialog.findViewById(chipIds.get(i));
+            checkedChips[i] = chip.getText().toString();
         }
-        //filters = checkedChips;
+
+        getImages(checkedChips);
     }
 
-    private void clearFilters() {
-        filters = null;
-    }
-
-    private void generateFilters(ChipGroup chipGroup) {
-        //TODO: Rewrite logic
+    private void getAllImages() {
+        getImages(null);
     }
 
     private void requestPermissions() {
@@ -158,70 +137,54 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     private void loadImages() {
         boolean SDCard = Environment.getExternalStorageState().equals(MEDIA_MOUNTED);
         if (SDCard) {
-            final String[] pathCol = {TableClasses.Image.PATH_COL};
-            loadNewImages(getCurrentImagePaths(pathCol));
-            getImages(pathCol, null);
-            Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
+            loadNewImages(getCurrentImagePaths());
+            getAllImages();
         }
     }
 
-    private String buildWhereClause(String col, int count, Boolean in) {
-        if (count > 0) {
-            StringBuilder where = new StringBuilder(col + (in ? " IN (" : " NOT IN ("));
-            for (int i = 0; i < count; i++) {
-                where.append("?, ");
-            }
-            where.setLength(where.length() - 2);
-            return where.append(")").toString();
-        }
-        return null;
-    }
-
-    private String[] extractFromCursor(Cursor cursor, String col) {
-        int count = cursor != null ? cursor.getCount() : 0;
-        String[] dataArr = new String[count];
-
-        for (int i = 0; i < count; i++) {
-            cursor.moveToPosition(i);
-            int index = cursor.getColumnIndex(col);
-            dataArr[i] = cursor.getString(index);
-        }
-        return dataArr;
-    }
-
-    //TODO: add filtering logic
-    private void getImages(String[] pathCol, @Nullable String[] filters) {
+    private void getImages(@Nullable String[] filters) {
         String where = null;
+        String[] imageIds = null;
         int filterCount = filters != null ? filters.length : 0;
 
         if (filters != null && filterCount > 0) {
-            String filterSelection = buildWhereClause(TableClasses.Filter.FILTER_COL, filterCount, true);
+            String filterSelection = dbManager.buildWhereClause(TableClasses.Filter.FILTER_COL, filterCount, true);
             Cursor filterCursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter._ID}, filterSelection, filters, null, null);
-            String[] filterIds = extractFromCursor(filterCursor, TableClasses.Filter._ID);
+            String[] filterIds = dbManager.extractFromCursor(filterCursor, TableClasses.Filter._ID);
+            if (filterCursor != null) { filterCursor.close(); }
 
-            String bridgeSelection = buildWhereClause(TableClasses.ImageFilter.FILTER_ID_COL, filterIds.length, true);
-            Cursor bridgeCursor = dbManager.selectFromImageFilterTable(new String[]{TableClasses.ImageFilter.IMAGE_ID_COL}, bridgeSelection, filterIds, null, null);
-            String[] imageIds = extractFromCursor(bridgeCursor, TableClasses.ImageFilter.IMAGE_ID_COL);
+            if (filterIds != null && filterIds.length > 0) {
+                String bridgeSelection = dbManager.buildWhereClause(TableClasses.ImageFilter.FILTER_ID_COL, filterIds.length, true);
+                Cursor bridgeCursor = dbManager.selectFromImageFilterTable(new String[]{TableClasses.ImageFilter.IMAGE_ID_COL}, bridgeSelection, filterIds, null, null);
+                imageIds = dbManager.extractFromCursor(bridgeCursor, TableClasses.ImageFilter.IMAGE_ID_COL);
+                if (bridgeCursor != null) { bridgeCursor.close(); }
+            }
 
-            where = buildWhereClause(TableClasses.Image.PATH_COL, imageIds.length, true);
+            if (imageIds != null && imageIds.length > 0) {
+                where = dbManager.buildWhereClause(TableClasses.Image._ID, imageIds.length, true);
+            } else {
+                Toast.makeText(this,"No matches found; Resetting filters", Toast.LENGTH_LONG).show();
+            }
         }
 
-        Cursor imagePaths = dbManager.selectFromImagePathTable(pathCol, where, filters, null, null);
+        Cursor imagePaths = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image.PATH_COL}, where, imageIds, null, null);
 
         int count = imagePaths != null ? imagePaths.getCount() : 0;
 
         totalImages.setText("Total Images: " + count);
 
         images.clear();
-        Collections.addAll(images, extractFromCursor(imagePaths, TableClasses.Image.PATH_COL));
+        Collections.addAll(images, dbManager.extractFromCursor(imagePaths, TableClasses.Image.PATH_COL));
 
         if (imagePaths != null) { imagePaths.close(); }
+
+        Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
     }
 
-    private String[] getCurrentImagePaths(String[] pathCol) {
-        Cursor imagePaths = dbManager.selectFromImagePathTable(pathCol, null, null, null, null);
+    private String[] getCurrentImagePaths() {
+        Cursor imagePaths = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image.PATH_COL}, null, null, null, null);
 
-        String[] dbData = extractFromCursor(imagePaths, pathCol[0]);
+        String[] dbData = dbManager.extractFromCursor(imagePaths, TableClasses.Image.PATH_COL);
 
         if (imagePaths != null) { imagePaths.close(); }
 
@@ -236,7 +199,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         String[] whereArgs = null;
 
         if (pathCount > 0) {
-            where = buildWhereClause(MediaStore.Images.Media.DATA, pathCount, false);
+            where = dbManager.buildWhereClause(MediaStore.Images.Media.DATA, pathCount, false);
             whereArgs = paths;
         }
 
@@ -315,7 +278,6 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
 
         builder.setView(input);
 
-        //TODO: add logic
         builder.setPositiveButton("OK", (dialogInterface, i) -> dbManager.insertToFilterTable(input.getText().toString()));
 
         builder.setNegativeButton("Cancel", (dialogInterface, i) -> dialogInterface.cancel());
