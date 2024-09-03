@@ -68,14 +68,14 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         menuButton.setOnClickListener(this::showMenu);
 
         ImageButton filterButton = findViewById(R.id.filter_button);
-        filterButton.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.FilterAction() {
+        filterButton.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.ShowFilterAction() {
             @Override
             public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) {
                 enterFilters(dialog, chipGroup);
             }
 
             @Override
-            public void negativeButtonPressed() {
+            public void onNegativeButtonPressed() {
                 getAllImages();
             }
         }));
@@ -250,9 +250,10 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         if (itemId == R.id.add_image_button) {
             addImage();
         } else if (itemId == R.id.add_filter_button) {
-            addFilter();
+            FilterDialogHelper.filterTextInputBox(this, str -> dbManager.insertToFilterTable(str));
         } else if (itemId == R.id.remove_filter_button) {
-            removeFilter();
+            //User will type in filter to be deleted to help prevent accidental deletions
+            FilterDialogHelper.filterTextInputBox(this, str -> removeFilter(str));
         } else {
             return false;
         }
@@ -264,24 +265,13 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         Toast.makeText(getApplicationContext(), "test addImage()", Toast.LENGTH_SHORT).show();
     }
 
-    private void removeFilter() {
-        //TODO: Figure out how I want this thing to work and replace this code block with it
-        Toast.makeText(this, "remove filter test", Toast.LENGTH_SHORT).show();
-    }
+    private void removeFilter(String str) {
+        String where = dbManager.buildWhereClause(TableClasses.Filter.FILTER_COL, 1, true);
+        Cursor cursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter._ID}, where, new String[]{str}, null, null);
+        String[] idArr = dbManager.extractFromCursor(cursor, TableClasses.Filter._ID);
+        if (cursor != null) { cursor.close(); }
 
-    private void addFilter() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("New Filter");
-
-        EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-
-        builder.setView(input);
-
-        builder.setPositiveButton("OK", (dialogInterface, i) -> dbManager.insertToFilterTable(input.getText().toString()));
-
-        builder.setNegativeButton("Cancel", (dialogInterface, i) -> dialogInterface.cancel());
-
-        builder.show();
+        dbManager.removeFromFilter(str);
+        dbManager.removeFromBridge(TableClasses.ImageFilter.FILTER_ID_COL, idArr);
     }
 }

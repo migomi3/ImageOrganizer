@@ -198,4 +198,10 @@ public class SQLiteManager extends SQLiteOpenHelper {
         String[] whereArg = {filter};
         return db.delete(TableClasses.Filter.TABLE_NAME, where, whereArg);
     }
+
+    public int removeFromBridge(String col, String[] idArr) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        String where = buildWhereClause(col, idArr.length, true);
+        return db.delete(TableClasses.ImageFilter.TABLE_NAME, where, idArr);
+    }
 }

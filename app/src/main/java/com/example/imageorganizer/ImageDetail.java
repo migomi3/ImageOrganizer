@@ -74,14 +74,14 @@ public class ImageDetail extends AppCompatActivity {
 
         Chip chip = new Chip(this);
         chip.setText("+");
-        chip.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.FilterAction() {
+        chip.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.ShowFilterAction() {
             @Override
             public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) {
                 buildBridges(dialog, chipGroup);
             }
 
             @Override
-            public void negativeButtonPressed() {
+            public void onNegativeButtonPressed() {
 
             }
         }));

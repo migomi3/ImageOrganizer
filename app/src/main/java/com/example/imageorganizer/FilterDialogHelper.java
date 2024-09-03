@@ -1,9 +1,12 @@
 package com.example.imageorganizer;
 
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.database.Cursor;
+import android.text.InputType;
 import android.widget.Button;
+import android.widget.EditText;
 
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
@@ -11,12 +14,16 @@ import com.google.android.material.chip.ChipGroup;
 public class FilterDialogHelper {
     static SQLiteManager dbManager;
 
-    public interface FilterAction {
+    public interface ShowFilterAction {
         void onOkButtonPressed (Dialog dialog, ChipGroup chipGroup);
-        void negativeButtonPressed ();
+        void onNegativeButtonPressed();
     }
 
-    public static void showFilters(Context context, FilterAction filterAction) {
+    public interface InputFilterAction {
+        void onPositiveButtonPressed(String str);
+    }
+
+    public static void showFilters(Context context, ShowFilterAction showFilterAction) {
         Dialog dialog = new Dialog(context);
         dialog.setContentView(R.layout.filter_layout);
         dbManager = new SQLiteManager(context);
@@ -27,11 +34,11 @@ public class FilterDialogHelper {
         Button okButton = dialog.findViewById(R.id.ok_button);
 
         negativeButton.setOnClickListener(view -> {
-            filterAction.negativeButtonPressed();
+            showFilterAction.onNegativeButtonPressed();
             dialog.dismiss();
         });
         okButton.setOnClickListener(view -> {
-            filterAction.onOkButtonPressed(dialog, filterChips);
+            showFilterAction.onOkButtonPressed(dialog, filterChips);
             dialog.dismiss();
         });
 
@@ -51,5 +58,20 @@ public class FilterDialogHelper {
             chip.setCheckable(true);
             chipGroup.addView(chip);
         }
+    }
+
+    public static void filterTextInputBox (Context context, InputFilterAction inputFilterAction) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle("New Filter");
+
+        EditText input = new EditText(context);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+
+        builder.setView(input);
+
+        builder.setPositiveButton("OK", (dialogInterface, i) -> inputFilterAction.onPositiveButtonPressed(input.getText().toString()));
+        builder.setNegativeButton("Cancel", (dialogInterface, i) -> dialogInterface.cancel());
+
+        builder.show();
     }
 }

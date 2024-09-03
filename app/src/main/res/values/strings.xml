@@ -10,4 +10,6 @@
     <string name="add_filters">Add filters</string>
     <string name="ok">OK</string>
     <string name="clear_filters">Clear Filters</string>
+    <string name="share_button_content_description">Share Image</string>
+    <string name="image_content_description">Image</string>
 </resources>
