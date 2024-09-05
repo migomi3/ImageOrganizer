@@ -67,9 +67,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         ImageButton filterButton = findViewById(R.id.filter_button);
         filterButton.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.ShowFilterAction() {
             @Override
-            public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) {
-                enterFilters(dialog, chipGroup);
-            }
+            public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) { enterFilters(dialog, chipGroup); }
 
             @Override
             public void onNegativeButtonPressed() {
@@ -248,7 +246,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     public boolean onMenuItemClick(MenuItem item) {
         int itemId = item.getItemId();
         if (itemId == R.id.add_image_button) {
-            addImage();
+            renameFilter();
         } else if (itemId == R.id.add_filter_button) {
             FilterDialogHelper.filterTextInputBox(this, str -> dbManager.insertToFilterTable(str));
         } else if (itemId == R.id.remove_filter_button) {
@@ -260,7 +258,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         return true;
     }
 
-    private void addImage() {
+    private void renameFilter() {
         //TODO: decide logic
         Toast.makeText(getApplicationContext(), "test addImage()", Toast.LENGTH_SHORT).show();
     }
