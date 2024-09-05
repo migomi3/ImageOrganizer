@@ -23,7 +23,8 @@ public class SQLiteManager extends SQLiteOpenHelper {
                     TableClasses.Image._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     TableClasses.Image.PATH_COL + " VARCHAR(255) NOT NULL UNIQUE, " +
                     TableClasses.Image.NAME_COL + " VARCHAR(255), " +
-                    MediaStore.Images.Media.DATE_TAKEN + " DATE);";
+                    MediaStore.Images.Media.DATE_TAKEN + " DATE, " +
+                    MediaStore.Images.Media.MIME_TYPE + " VARCHAR(10) NOT NULL);";
     private static final String SQL_CREATE_FILTERS_TABLE =
             "CREATE TABLE " + TableClasses.Filter.TABLE_NAME + "(" +
                     TableClasses.Filter._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -67,7 +68,7 @@ public class SQLiteManager extends SQLiteOpenHelper {
         return sdf.format(new Date(Long.parseLong(unix)));
     }
 
-    public long insertToImagePathTable(String path, @Nullable String name, @Nullable String date) {
+    public long insertToImagePathTable(String path, @Nullable String name, @Nullable String date, String type) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
 
@@ -78,6 +79,7 @@ public class SQLiteManager extends SQLiteOpenHelper {
         if (date != null){
             values.put(MediaStore.Images.Media.DATE_TAKEN, unixInterpreter(date));
         }
+        values.put(MediaStore.Images.Media.MIME_TYPE, type);
 
         return db.insert(TableClasses.Image.TABLE_NAME, null, values);
     }

@@ -11,17 +11,14 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.Manifest;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
-import android.text.InputType;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.PopupMenu;
 import android.widget.TextView;
@@ -182,8 +179,8 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     private String[] getCurrentImagePaths() {
-        Cursor imagePaths = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image.PATH_COL}, null, null, null, null);
-
+        Cursor imagePaths = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image.PATH_COL},
+                null, null, null, null);
         String[] dbData = dbManager.extractFromCursor(imagePaths, TableClasses.Image.PATH_COL);
 
         if (imagePaths != null) { imagePaths.close(); }
@@ -192,7 +189,8 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     public void loadNewImages(String[] paths) {
-        final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN};
+        final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.MIME_TYPE};
         final String order = MediaStore.Images.Media.DATE_TAKEN + " DESC";
         int pathCount = paths.length;
         String where = null;
@@ -212,12 +210,14 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
             int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
             int nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME);
             int dateIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
+            int mimeIndex = cursor.getColumnIndex(MediaStore.Images.Media.MIME_TYPE);
 
             String data = cursor.getString(dataIndex);
             String name = cursor.getString(nameIndex);
             String date = cursor.getString(dateIndex);
+            String mime = cursor.getString(mimeIndex);
 
-            dbManager.insertToImagePathTable(data, name, date);
+            dbManager.insertToImagePathTable(data, name, date, mime);
         }
 
         if (cursor != null) { cursor.close(); }

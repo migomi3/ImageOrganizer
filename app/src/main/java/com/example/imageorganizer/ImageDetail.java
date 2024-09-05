@@ -2,13 +2,19 @@ package com.example.imageorganizer;
 
 
 import android.app.Dialog;
+import android.content.Intent;
 import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
+import android.view.View;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
@@ -24,6 +30,7 @@ public class ImageDetail extends AppCompatActivity {
     private ScaleGestureDetector scaleGestureDetector;
     private SQLiteManager dbManager;
     private String[] imageIdArr;
+    private String[] mimeArr;
 
     // on below line we are defining our scale factor.
     private float mScaleFactor = 1.0f;
@@ -52,11 +59,17 @@ public class ImageDetail extends AppCompatActivity {
         }
 
         String where = dbManager.buildWhereClause(TableClasses.Image.PATH_COL, 1, true);
-        Cursor imageCursor = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image._ID}, where, new String[]{imgPath}, null, null);
+        Cursor imageCursor = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image._ID, MediaStore.Images.Media.MIME_TYPE},
+                where, new String[]{imgPath}, null, null);
         imageIdArr = dbManager.extractFromCursor(imageCursor, TableClasses.Image._ID);
+        mimeArr = dbManager.extractFromCursor(imageCursor, MediaStore.Images.Media.MIME_TYPE);
+
         if (imageCursor != null) { imageCursor.close(); }
 
         loadChips();
+
+        ImageButton shareButton = findViewById(R.id.shareButton);
+        shareButton.setOnClickListener(v -> share());
     }
 
     private void loadChips() {
@@ -81,9 +94,7 @@ public class ImageDetail extends AppCompatActivity {
             }
 
             @Override
-            public void onNegativeButtonPressed() {
-
-            }
+            public void onNegativeButtonPressed() {}
         }));
         chipgroup.addView(chip);
     }
@@ -135,5 +146,15 @@ public class ImageDetail extends AppCompatActivity {
             imageView.setScaleY(mScaleFactor);
             return true;
         }
+    }
+
+    private void share() {
+        Uri imageUri = FileProvider.getUriForFile(this, "com.example.imageorganizer.fileprovider", new File(imgPath));
+        Intent sharingIntent = new Intent(Intent.ACTION_SEND);
+
+        sharingIntent.putExtra(Intent.EXTRA_STREAM, imageUri);
+        sharingIntent.setTypeAndNormalize(mimeArr[0]);
+
+        startActivity(Intent.createChooser(sharingIntent, "Share Via:"));
     }
 }
