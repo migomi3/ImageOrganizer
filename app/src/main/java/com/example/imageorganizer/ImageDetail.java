@@ -1,22 +1,35 @@
 package com.example.imageorganizer;
 
 
+import android.app.Dialog;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.squareup.picasso.Picasso;
 
 import java.io.File;
+import java.util.List;
 
 public class ImageDetail extends AppCompatActivity {
 
     String imgPath;
     private ImageView imageView;
     private ScaleGestureDetector scaleGestureDetector;
+    private SQLiteManager dbManager;
+    private String[] imageIdArr;
+    private String[] mimeArr;
 
     // on below line we are defining our scale factor.
     private float mScaleFactor = 1.0f;
@@ -25,6 +38,7 @@ public class ImageDetail extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_image_detail);
+        dbManager = new SQLiteManager(this);
 
         // on below line getting data which we have passed from our adapter class.
         imgPath = getIntent().getStringExtra("imgPath");
@@ -41,6 +55,68 @@ public class ImageDetail extends AppCompatActivity {
         // if the file exists then we are loading that image in our image view.
         if (imgFile.exists()) {
             Picasso.get().load(imgFile).placeholder(R.drawable.ic_launcher_background).into(imageView);
+        }
+
+        String where = dbManager.buildWhereClause(TableClasses.Image.PATH_COL, 1, true);
+        Cursor imageCursor = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image._ID, MediaStore.Images.Media.MIME_TYPE},
+                where, new String[]{imgPath}, null, null);
+        imageIdArr = dbManager.extractFromCursor(imageCursor, TableClasses.Image._ID);
+        mimeArr = dbManager.extractFromCursor(imageCursor, MediaStore.Images.Media.MIME_TYPE);
+
+        if (imageCursor != null) { imageCursor.close(); }
+
+        loadChips();
+
+        ImageButton shareButton = findViewById(R.id.shareButton);
+        shareButton.setOnClickListener(v -> share());
+    }
+
+    private void loadChips() {
+        ChipGroup chipgroup = findViewById(R.id.imageDetailChipGroup);
+
+        String[] filterArr = dbManager.getFiltersFromImageId(imageIdArr);
+
+        if (filterArr != null){
+            for (String tag : filterArr) {
+                Chip chip = new Chip(this);
+                chip.setText(tag);
+                chipgroup.addView(chip);
+            }
+        }
+
+        Chip chip = new Chip(this);
+        chip.setText("+");
+        chip.setOnClickListener(view -> FilterDialogHelper.showCheckableFilters(this, new FilterDialogHelper.ShowFilterAction() {
+            @Override
+            public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) {
+                buildBridges(dialog, chipGroup);
+            }
+
+            @Override
+            public void onNegativeButtonPressed() {}
+        }));
+        chipgroup.addView(chip);
+    }
+
+    private void buildBridges(Dialog dialog, ChipGroup chipgroup) {
+        long imgId = Long.parseLong(imageIdArr[0]);
+        List<Integer> filterList = chipgroup.getCheckedChipIds();
+        int listSize = filterList.size();
+        String[] filterArr = new String[listSize];
+
+        for (int i = 0; i < listSize; i++) {
+            Chip chip = dialog.findViewById(filterList.get(i));
+            filterArr[i] = chip.getText().toString();
+        }
+
+        String where = dbManager.buildWhereClause(TableClasses.Filter.FILTER_COL, listSize, true);
+        Cursor cursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter._ID}, where, filterArr, null, null);
+        String[] filterIdArr = dbManager.extractFromCursor(cursor, TableClasses.Filter._ID);
+        if (cursor != null) { cursor.close(); }
+
+        for (String FilterId : filterIdArr) {
+            long id = Long.parseLong(FilterId);
+            dbManager.insertToImageFilterTable(imgId, id);
         }
     }
 
@@ -69,5 +145,15 @@ public class ImageDetail extends AppCompatActivity {
             imageView.setScaleY(mScaleFactor);
             return true;
         }
+    }
+
+    private void share() {
+        Uri imageUri = FileProvider.getUriForFile(this, "com.example.imageorganizer.fileprovider", new File(imgPath));
+        Intent sharingIntent = new Intent(Intent.ACTION_SEND);
+
+        sharingIntent.putExtra(Intent.EXTRA_STREAM, imageUri);
+        sharingIntent.setTypeAndNormalize(mimeArr[0]);
+
+        startActivity(Intent.createChooser(sharingIntent, "Share Via:"));
     }
 }

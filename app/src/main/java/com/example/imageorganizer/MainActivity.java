@@ -1,34 +1,25 @@
 package com.example.imageorganizer;
 
-import static android.content.ContentValues.TAG;
 import static android.os.Environment.MEDIA_MOUNTED;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.datastore.preferences.core.MutablePreferences;
-import androidx.datastore.preferences.core.Preferences;
-import androidx.datastore.preferences.core.PreferencesKeys;
-import androidx.datastore.preferences.rxjava3.RxPreferenceDataStoreBuilder;
-import androidx.datastore.rxjava3.RxDataStore;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.Manifest;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
-import android.text.InputType;
-import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.PopupMenu;
 import android.widget.TextView;
@@ -38,22 +29,16 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
-import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.core.Single;
-import io.reactivex.rxjava3.schedulers.Schedulers;
-
 
 //https://www.youtube.com/watch?v=zg0_YS9PYi4
 //https://www.geeksforgeeks.org/how-to-build-a-photo-viewing-application-in-android/
-//https://developer.android.com/topic/libraries/architecture/datastore#java
-//https://stackoverflow.com/questions/75443067/preferences-datastore-in-android-using-java
-//https://medium.com/@deadmanapple/using-the-android-datastore-library-instead-of-sharedpreferences-in-java-d6744c348a05
 
 public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuItemClickListener {
     private static final int PERMISSION_REQUEST_CODE = 111;
@@ -61,43 +46,43 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     private RecyclerView recycler;
     private ArrayList<String> images;
     private TextView totalImages;
-
-    RxDataStore<Preferences> dataStore;
-    Preferences.Key<Set<String>> FILTER_KEY = PreferencesKeys.stringSetKey("filter_key");
-    ArrayList<String> filterList = new ArrayList<>();
+    private SQLiteManager dbManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        DataStoreSingleton dataStoreSingleton = DataStoreSingleton.getInstance();
-        if (dataStoreSingleton.getDataStore() == null) {
-            dataStore = new RxPreferenceDataStoreBuilder(this, "filters").build();
-        } else {
-            dataStore = dataStoreSingleton.getDataStore();
-        }
-        dataStoreSingleton.setDataStore(dataStore);
-
         recycler = findViewById(R.id.gallery_recycler);
         images = new ArrayList<>();
         GalleryAdaptor adaptor = new GalleryAdaptor(MainActivity.this, images);
-
+        dbManager = new SQLiteManager(this);
 
         recycler.setAdapter(adaptor);
 
         totalImages = findViewById(R.id.total_images);
 
         requestPermissions();
-
         prepareRecyclerView();
 
         ImageButton menuButton = findViewById(R.id.menu_button);
         menuButton.setOnClickListener(this::showMenu);
 
         ImageButton filterButton = findViewById(R.id.filter_button);
-        filterButton.setOnClickListener(view -> showFilters());
+        filterButton.setOnClickListener(view -> FilterDialogHelper.showCheckableFilters(this, new FilterDialogHelper.ShowFilterAction() {
+            @Override
+            public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) { enterFilters(dialog, chipGroup); }
 
+            @Override
+            public void onNegativeButtonPressed() {
+                getAllImages();
+            }
+        }));
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
     }
 
     private void showMenu(View view) {
@@ -107,59 +92,22 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         popup.show();
     }
 
-
-    private void showFilters() {
-        Dialog dialog = new Dialog(this);
-        dialog.setContentView(R.layout.filter_layout);
-
-        ChipGroup filterChips = dialog.findViewById(R.id.filter_chips);
-
-        Button clearButton = dialog.findViewById(R.id.clear_filter_button);
-        Button okButton = dialog.findViewById(R.id.ok_button);
-        
-        clearButton.setOnClickListener(view -> {
-            clearFilters();
-            dialog.dismiss();
-        });
-        okButton.setOnClickListener(view -> {
-            enterFilters(dialog, filterChips);
-            dialog.dismiss();
-        });
-
-        generateFilters(filterChips);
-        dialog.show();
-    }
-
     private void enterFilters(Dialog dialog, ChipGroup chipGroup) {
         List<Integer> chipIds = chipGroup.getCheckedChipIds();
-        ArrayList<String> checkedChips = new ArrayList<>();
-        for(Integer id : chipIds) {
-            Chip chip = dialog.findViewById(id);
-            checkedChips.add(chip.getText().toString());
+        int listSize = chipIds.size();
+
+        String[] checkedChips = new String[listSize];
+
+        for(int i = 0; i < listSize; i++) {
+            Chip chip = dialog.findViewById(chipIds.get(i));
+            checkedChips[i] = chip.getText().toString();
         }
-        filterList = checkedChips;
+
+        getImages(checkedChips);
     }
 
-    private void clearFilters() {
-        filterList.clear();
-    }
-
-    private void generateFilters(ChipGroup chipGroup) {
-        Flowable<Set<String>> testSingle = dataStore.data().map(prefs -> prefs.get(FILTER_KEY)).onErrorResumeNext(throwable -> {
-            Log.e(TAG, "Error reading data from DataStore", throwable);
-            return Flowable.just(new HashSet<>());
-        });
-        testSingle.subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribe(filterSet -> {
-            for (String filterStr : filterSet) {
-                Chip filterChip = new Chip(this);
-                filterChip.setText(filterStr);
-                filterChip.setCheckable(true);
-                filterChip.setChecked(filterList.contains(filterStr));
-                chipGroup.addView(filterChip);
-            }
-        },
-        throwable -> Log.e(TAG, "generateFilters: ", throwable));
-
+    private void getAllImages() {
+        getImages(null);
     }
 
     private void requestPermissions() {
@@ -174,39 +122,107 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     private void requestPermission() {
         ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
     }
+
     private boolean checkPermission() {
         int result = ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.READ_EXTERNAL_STORAGE);
         return result == PackageManager.PERMISSION_GRANTED;
     }
 
     private void prepareRecyclerView() {
-
         GridLayoutManager manager = new GridLayoutManager(MainActivity.this, 4);
-
         recycler.setLayoutManager(manager);
     }
 
     private void loadImages() {
         boolean SDCard = Environment.getExternalStorageState().equals(MEDIA_MOUNTED);
         if (SDCard) {
-            final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID};
-            final String order = MediaStore.Images.Media.DATE_TAKEN + " DESC";
+            loadNewImages(getCurrentImagePaths());
+            getAllImages();
+        }
+    }
 
-            Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, order);
+    private void getImages(@Nullable String[] filters) {
+        String where = null;
+        String[] imageIds = null;
+        int filterCount = filters != null ? filters.length : 0;
 
-            int count = cursor != null ? cursor.getCount() : 0;
+        if (filters != null && filterCount > 0) {
+            String filterSelection = dbManager.buildWhereClause(TableClasses.Filter.FILTER_COL, filterCount, true);
+            Cursor filterCursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter._ID}, filterSelection, filters, null, null);
+            String[] filterIds = dbManager.extractFromCursor(filterCursor, TableClasses.Filter._ID);
+            if (filterCursor != null) { filterCursor.close(); }
 
-            totalImages.setText("Total Images: " + count);
-
-            for (int i = 0; i < count; i++) {
-                cursor.moveToPosition(i);
-                int colIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
-                images.add(cursor.getString(colIndex));
+            if (filterIds != null && filterIds.length > 0) {
+                String bridgeSelection = dbManager.buildWhereClause(TableClasses.ImageFilter.FILTER_ID_COL, filterIds.length, true);
+                Cursor bridgeCursor = dbManager.selectFromImageFilterTable(new String[]{TableClasses.ImageFilter.IMAGE_ID_COL}, bridgeSelection, filterIds, null, null);
+                imageIds = dbManager.extractFromCursor(bridgeCursor, TableClasses.ImageFilter.IMAGE_ID_COL);
+                if (bridgeCursor != null) { bridgeCursor.close(); }
             }
 
-            Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
-            if (cursor != null) { cursor.close(); }
+            if (imageIds != null && imageIds.length > 0) {
+                where = dbManager.buildWhereClause(TableClasses.Image._ID, imageIds.length, true);
+            } else {
+                Toast.makeText(this,"No matches found; Resetting filters", Toast.LENGTH_LONG).show();
+            }
         }
+
+        Cursor imagePaths = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image.PATH_COL}, where, imageIds, null, null);
+
+        int count = imagePaths != null ? imagePaths.getCount() : 0;
+
+        totalImages.setText("Total Images: " + count);
+
+        images.clear();
+        Collections.addAll(images, dbManager.extractFromCursor(imagePaths, TableClasses.Image.PATH_COL));
+
+        if (imagePaths != null) { imagePaths.close(); }
+
+        Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
+    }
+
+    private String[] getCurrentImagePaths() {
+        Cursor imagePaths = dbManager.selectFromImagePathTable(new String[]{TableClasses.Image.PATH_COL},
+                null, null, null, null);
+        String[] dbData = dbManager.extractFromCursor(imagePaths, TableClasses.Image.PATH_COL);
+
+        if (imagePaths != null) { imagePaths.close(); }
+
+        return dbData;
+    }
+
+    public void loadNewImages(String[] paths) {
+        Set<String> pathSet = new HashSet<>(Arrays.asList(paths));
+        final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.MIME_TYPE};
+
+        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, null);
+
+        if (cursor != null) {
+            while (cursor.moveToNext()) {
+                int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
+                String data = cursor.getString(dataIndex);
+
+                if (pathSet.contains(data)){
+                    pathSet.remove(data);
+                } else {
+                    int nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME);
+                    int dateIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
+                    int mimeIndex = cursor.getColumnIndex(MediaStore.Images.Media.MIME_TYPE);
+
+                    String name = cursor.getString(nameIndex);
+                    String date = cursor.getString(dateIndex);
+                    String mime = cursor.getString(mimeIndex);
+
+                    dbManager.insertToImagePathTable(data, name, date, mime);
+                }
+            }
+            cursor.close();
+        }
+
+        String[] remainingPathArr = new String[pathSet.size()];
+        pathSet.toArray(remainingPathArr);
+
+        dbManager.removeFromImages(TableClasses.Image.PATH_COL, remainingPathArr, true);
     }
 
     @Override
@@ -233,61 +249,54 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     @Override
     public boolean onMenuItemClick(MenuItem item) {
         int itemId = item.getItemId();
-        if (itemId == R.id.add_image_button) {
-            addImage();
+        if (itemId == R.id.rename_filter_button) {
+            renameFilter();
         } else if (itemId == R.id.add_filter_button) {
-            addFilter();
+            FilterDialogHelper.filterTextInputBox(this, str -> dbManager.insertToFilterTable(str));
         } else if (itemId == R.id.remove_filter_button) {
-            removeFilter();
+            //User will type in filter to be deleted to help prevent accidental deletions
+            FilterDialogHelper.filterTextInputBox(this, this::removeFilter);
         } else {
             return false;
         }
         return true;
     }
 
-    private void addImage() {
-        //TODO: write code
-        Toast.makeText(getApplicationContext(), "test addImage()", Toast.LENGTH_SHORT).show();
+    private void renameFilter() {
+        Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.filter_layout_w_ok);
+        dbManager = new SQLiteManager(this);
+
+        ChipGroup chipGroup = dialog.findViewById(R.id.filter_chips);
+
+        Button cancelButton = dialog.findViewById(R.id.cancel_button);
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+
+        Cursor cursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter.FILTER_COL}, null, null, null, null);
+        String[] filters = dbManager.extractFromCursor(cursor, TableClasses.Filter.FILTER_COL);
+        if ( cursor != null) { cursor.close(); }
+
+        for (String tag : filters) {
+            Chip chip = new Chip(chipGroup.getContext());
+            chip.setText(tag);
+            chip.setOnClickListener(v -> FilterDialogHelper.filterTextInputBox(this,
+                    str -> {
+                        dbManager.updateFilterName(tag, str);
+                        dialog.dismiss();
+                    }));
+            chipGroup.addView(chip);
+        }
+
+        dialog.show();
     }
 
-    private void removeFilter() {
-        //TODO: Figure out how I want this thing to work and replace this code block with it
-        dataStore.updateDataAsync(prefsIn -> {
-            MutablePreferences mutablePreferences = prefsIn.toMutablePreferences();
-            mutablePreferences.remove(FILTER_KEY);
-            return Single.just(mutablePreferences);
-        });
-        Toast.makeText(this, "remove filter test", Toast.LENGTH_SHORT).show();
-    }
+    private void removeFilter(String str) {
+        String where = dbManager.buildWhereClause(TableClasses.Filter.FILTER_COL, 1, true);
+        Cursor cursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter._ID}, where, new String[]{str}, null, null);
+        String[] idArr = dbManager.extractFromCursor(cursor, TableClasses.Filter._ID);
+        if (cursor != null) { cursor.close(); }
 
-    private void addFilter() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("New Filter");
-
-        final EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-
-        builder.setView(input);
-
-        builder.setPositiveButton("OK", (dialogInterface, i) -> dataStore.updateDataAsync(prefsIn -> {
-            MutablePreferences mutablePreferences = prefsIn.toMutablePreferences();
-            String inputStr = input.getText().toString();
-            Set<String> filter_set;
-
-            boolean setExists = mutablePreferences.get(FILTER_KEY) != null;
-
-            if(setExists) { filter_set = new HashSet<>(mutablePreferences.get(FILTER_KEY)); }
-            else { filter_set = new HashSet<>(); }
-
-            filter_set.add(inputStr);
-
-            mutablePreferences.set(FILTER_KEY, filter_set);
-            return Single.just(mutablePreferences);
-        }));
-
-        builder.setNegativeButton("Cancel", (dialogInterface, i) -> dialogInterface.cancel());
-
-        builder.show();
-
+        dbManager.removeFromFilter(str);
+        dbManager.removeFromBridge(TableClasses.ImageFilter.FILTER_ID_COL, idArr);
     }
 }
