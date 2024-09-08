@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">ImageOrganizer</string>
     <string name="image_organizer">Image Organizer</string>
-    <string name="add_images">Add Images</string>
+    <string name="rename_filter">Rename Filter</string>
     <string name="total_images">Total Images: </string>
     <string name="filterContentDescription">Access gallery filters</string>
     <string name="all">All</string>
@@ -12,4 +12,5 @@
     <string name="clear_filters">Clear Filters</string>
     <string name="share_button_content_description">Share Image</string>
     <string name="image_content_description">Image</string>
+    <string name="cancel">Cancel</string>
 </resources>

@@ -19,6 +19,7 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.PopupMenu;
 import android.widget.TextView;
@@ -28,9 +29,12 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 
 //https://www.youtube.com/watch?v=zg0_YS9PYi4
@@ -65,7 +69,7 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         menuButton.setOnClickListener(this::showMenu);
 
         ImageButton filterButton = findViewById(R.id.filter_button);
-        filterButton.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.ShowFilterAction() {
+        filterButton.setOnClickListener(view -> FilterDialogHelper.showCheckableFilters(this, new FilterDialogHelper.ShowFilterAction() {
             @Override
             public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) { enterFilters(dialog, chipGroup); }
 
@@ -187,38 +191,38 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     public void loadNewImages(String[] paths) {
+        Set<String> pathSet = new HashSet<>(Arrays.asList(paths));
         final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME,
                 MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.MIME_TYPE};
-        final String order = MediaStore.Images.Media.DATE_TAKEN + " DESC";
-        int pathCount = paths.length;
-        String where = null;
-        String[] whereArgs = null;
 
-        if (pathCount > 0) {
-            where = dbManager.buildWhereClause(MediaStore.Images.Media.DATA, pathCount, false);
-            whereArgs = paths;
+        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, null);
+
+        if (cursor != null) {
+            while (cursor.moveToNext()) {
+                int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
+                String data = cursor.getString(dataIndex);
+
+                if (pathSet.contains(data)){
+                    pathSet.remove(data);
+                } else {
+                    int nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME);
+                    int dateIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
+                    int mimeIndex = cursor.getColumnIndex(MediaStore.Images.Media.MIME_TYPE);
+
+                    String name = cursor.getString(nameIndex);
+                    String date = cursor.getString(dateIndex);
+                    String mime = cursor.getString(mimeIndex);
+
+                    dbManager.insertToImagePathTable(data, name, date, mime);
+                }
+            }
+            cursor.close();
         }
 
-        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, where, whereArgs, order);
+        String[] remainingPathArr = new String[pathSet.size()];
+        pathSet.toArray(remainingPathArr);
 
-        int count = cursor != null ? cursor.getCount() : 0;
-
-        for (int i = 0; i < count; i++) {
-            cursor.moveToPosition(i);
-            int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
-            int nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME);
-            int dateIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN);
-            int mimeIndex = cursor.getColumnIndex(MediaStore.Images.Media.MIME_TYPE);
-
-            String data = cursor.getString(dataIndex);
-            String name = cursor.getString(nameIndex);
-            String date = cursor.getString(dateIndex);
-            String mime = cursor.getString(mimeIndex);
-
-            dbManager.insertToImagePathTable(data, name, date, mime);
-        }
-
-        if (cursor != null) { cursor.close(); }
+        dbManager.removeFromImages(TableClasses.Image.PATH_COL, remainingPathArr, true);
     }
 
     @Override
@@ -245,13 +249,13 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     @Override
     public boolean onMenuItemClick(MenuItem item) {
         int itemId = item.getItemId();
-        if (itemId == R.id.add_image_button) {
+        if (itemId == R.id.rename_filter_button) {
             renameFilter();
         } else if (itemId == R.id.add_filter_button) {
             FilterDialogHelper.filterTextInputBox(this, str -> dbManager.insertToFilterTable(str));
         } else if (itemId == R.id.remove_filter_button) {
             //User will type in filter to be deleted to help prevent accidental deletions
-            FilterDialogHelper.filterTextInputBox(this, str -> removeFilter(str));
+            FilterDialogHelper.filterTextInputBox(this, this::removeFilter);
         } else {
             return false;
         }
@@ -259,8 +263,31 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
     }
 
     private void renameFilter() {
-        //TODO: decide logic
-        Toast.makeText(getApplicationContext(), "test addImage()", Toast.LENGTH_SHORT).show();
+        Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.filter_layout_w_ok);
+        dbManager = new SQLiteManager(this);
+
+        ChipGroup chipGroup = dialog.findViewById(R.id.filter_chips);
+
+        Button cancelButton = dialog.findViewById(R.id.cancel_button);
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+
+        Cursor cursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter.FILTER_COL}, null, null, null, null);
+        String[] filters = dbManager.extractFromCursor(cursor, TableClasses.Filter.FILTER_COL);
+        if ( cursor != null) { cursor.close(); }
+
+        for (String tag : filters) {
+            Chip chip = new Chip(chipGroup.getContext());
+            chip.setText(tag);
+            chip.setOnClickListener(v -> FilterDialogHelper.filterTextInputBox(this,
+                    str -> {
+                        dbManager.updateFilterName(tag, str);
+                        dialog.dismiss();
+                    }));
+            chipGroup.addView(chip);
+        }
+
+        dialog.show();
     }
 
     private void removeFilter(String str) {

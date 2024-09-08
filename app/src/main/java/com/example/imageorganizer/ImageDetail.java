@@ -9,7 +9,6 @@ import android.os.Bundle;
 import android.provider.MediaStore;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
-import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 
@@ -87,7 +86,7 @@ public class ImageDetail extends AppCompatActivity {
 
         Chip chip = new Chip(this);
         chip.setText("+");
-        chip.setOnClickListener(view -> FilterDialogHelper.showFilters(this, new FilterDialogHelper.ShowFilterAction() {
+        chip.setOnClickListener(view -> FilterDialogHelper.showCheckableFilters(this, new FilterDialogHelper.ShowFilterAction() {
             @Override
             public void onOkButtonPressed(Dialog dialog, ChipGroup chipGroup) {
                 buildBridges(dialog, chipGroup);

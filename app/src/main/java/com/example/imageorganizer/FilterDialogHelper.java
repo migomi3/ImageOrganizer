@@ -23,14 +23,14 @@ public class FilterDialogHelper {
         void onPositiveButtonPressed(String str);
     }
 
-    public static void showFilters(Context context, ShowFilterAction showFilterAction) {
+    public static void showCheckableFilters(Context context, ShowFilterAction showFilterAction) {
         Dialog dialog = new Dialog(context);
-        dialog.setContentView(R.layout.filter_layout);
+        dialog.setContentView(R.layout.filter_layout_w_ok);
         dbManager = new SQLiteManager(context);
 
         ChipGroup filterChips = dialog.findViewById(R.id.filter_chips);
 
-        Button negativeButton = dialog.findViewById(R.id.clear_filter_button);
+        Button negativeButton = dialog.findViewById(R.id.cancel_button);
         Button okButton = dialog.findViewById(R.id.ok_button);
 
         negativeButton.setOnClickListener(view -> {
@@ -42,12 +42,11 @@ public class FilterDialogHelper {
             dialog.dismiss();
         });
 
-        generateFilters(filterChips);
+        generateCheckableFilters(filterChips);
         dialog.show();
     }
 
-    private static void generateFilters(ChipGroup chipGroup) {
-        //TODO: Rewrite logic
+    private static void generateCheckableFilters(ChipGroup chipGroup) {
         Cursor cursor = dbManager.selectFromFilterTable(new String[]{TableClasses.Filter.FILTER_COL}, null, null, null, null);
         String[] filters = dbManager.extractFromCursor(cursor, TableClasses.Filter.FILTER_COL);
         if ( cursor != null) { cursor.close(); }

@@ -206,4 +206,20 @@ public class SQLiteManager extends SQLiteOpenHelper {
         String where = buildWhereClause(col, idArr.length, true);
         return db.delete(TableClasses.ImageFilter.TABLE_NAME, where, idArr);
     }
+
+    public int updateFilterName(String oldName, String newName) {
+        SQLiteDatabase db = this.getWritableDatabase();
+
+        ContentValues values = new ContentValues();
+        values.put(TableClasses.Filter.FILTER_COL, newName);
+        String where = TableClasses.Filter.FILTER_COL + " = ?";
+
+        return db.update(TableClasses.Filter.TABLE_NAME, values, where, new String[]{oldName});
+    }
+
+    public int removeFromImages(String col, String[] whereArg, Boolean in) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        String where = buildWhereClause(col, whereArg.length, in);
+        return db.delete(TableClasses.Image.TABLE_NAME, where, whereArg);
+    }
 }
