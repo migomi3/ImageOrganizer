@@ -137,7 +137,6 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         boolean SDCard = Environment.getExternalStorageState().equals(MEDIA_MOUNTED);
         if (SDCard) {
             loadNewImages(getCurrentImagePaths());
-            getAllImages();
         }
     }
 
@@ -172,12 +171,14 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
 
         totalImages.setText("Total Images: " + count);
 
+        int itemRange = recycler.getAdapter() != null ? recycler.getAdapter().getItemCount() : 0;
         images.clear();
+        Objects.requireNonNull(recycler.getAdapter()).notifyItemRangeRemoved(0, itemRange);
         Collections.addAll(images, dbManager.extractFromCursor(imagePaths, TableClasses.Image.PATH_COL));
 
         if (imagePaths != null) { imagePaths.close(); }
 
-        Objects.requireNonNull(recycler.getAdapter()).notifyDataSetChanged();
+        Objects.requireNonNull(recycler.getAdapter()).notifyItemRangeInserted(0, recycler.getAdapter().getItemCount());
     }
 
     private String[] getCurrentImagePaths() {
@@ -194,13 +195,17 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
         Set<String> pathSet = new HashSet<>(Arrays.asList(paths));
         final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME,
                 MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.MIME_TYPE};
+        String orderBy = MediaStore.Images.Media.DATE_TAKEN + " DESC";
 
-        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, null);
+        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, orderBy);
 
         if (cursor != null) {
+            int count = cursor.getCount();
+
             while (cursor.moveToNext()) {
                 int dataIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
                 String data = cursor.getString(dataIndex);
+                images.add(data);
 
                 if (pathSet.contains(data)){
                     pathSet.remove(data);
@@ -217,6 +222,9 @@ public class MainActivity extends AppCompatActivity implements PopupMenu.OnMenuI
                 }
             }
             cursor.close();
+
+            totalImages.setText("Total Images: " + count);
+            Objects.requireNonNull(recycler.getAdapter()).notifyItemRangeInserted(0, count);
         }
 
         String[] remainingPathArr = new String[pathSet.size()];

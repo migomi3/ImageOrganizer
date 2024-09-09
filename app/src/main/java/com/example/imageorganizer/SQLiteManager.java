@@ -218,6 +218,9 @@ public class SQLiteManager extends SQLiteOpenHelper {
     }
 
     public int removeFromImages(String col, String[] whereArg, Boolean in) {
+        if (whereArg == null || whereArg.length == 0) {
+            return 0;
+        }
         SQLiteDatabase db = this.getWritableDatabase();
         String where = buildWhereClause(col, whereArg.length, in);
         return db.delete(TableClasses.Image.TABLE_NAME, where, whereArg);
